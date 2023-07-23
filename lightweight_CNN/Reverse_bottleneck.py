@@ -12,6 +12,8 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import tensorflow_model_optimization as tfmot
 
+from keras_flops import get_flops
+
 # Calculate F1-Score while training
 from sklearn.metrics import f1_score, recall_score, precision_score
 
@@ -195,6 +197,8 @@ end_step = np.ceil(num_images / BATCH_SIZE).astype(np.int32) * 5
 
 
 model.summary()
+flops = get_flops(model)
+print(f"FLOPS: {flops / 10 ** 6:.03} M")
 model.compile(
     loss='sparse_categorical_crossentropy',
     optimizer='adam',

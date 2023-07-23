@@ -63,7 +63,7 @@ test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y))
 BATCH_SIZE = 64
 SHUFFLE_BUFFER_SIZE = 1024
 EPOCHS = 100
-LEARNING_RATE = 5e-4
+LEARNING_RATE = 1e-3
 
 train_dataset = train_dataset.shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE)
 test_dataset = test_dataset.batch(BATCH_SIZE)
@@ -71,15 +71,20 @@ test_dataset = test_dataset.batch(BATCH_SIZE)
 num_classes = len(Counter(train_y.tolist()))
 
 def make_layers(x, output_channel, kernel_size, stride):
+    identity = tf.keras.Sequential([
+      Conv2D(output_channel, 1, strides=stride, activation='relu',padding='same'),
+      Normalization(),
+      Dropout(0.1)
+    ])(x)
     x = tf.keras.Sequential([
       Conv2D(output_channel, kernel_size, strides=stride, activation='relu',padding='same'),
       Normalization(),
       Dropout(0.1)
     ])(x)
-    return x
+    return tf.keras.layers.add([x,identity])
 
 
-def cnn(
+def resnet(
     inputs,
     classes
 ):
@@ -99,7 +104,7 @@ def cnn(
 
 # Create an instance of the model
 inputs = tf.keras.Input(shape=(171,9,1))
-model = tf.keras.Model(inputs=inputs, outputs=cnn(inputs, num_classes))
+model = tf.keras.Model(inputs=inputs, outputs=resnet(inputs, num_classes))
 model.summary()
 flops = get_flops(model)
 print(f"FLOPS: {flops / 10 ** 6:.03} M")
