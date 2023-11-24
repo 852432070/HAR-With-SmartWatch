@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 from collections import Counter
 import tensorflow as tf
 
-from tensorflow.keras.layers import Dense, Flatten, Conv2D, Normalization, ReLU, Dropout
+from tensorflow.keras.layers import Concatenate, Dense, Flatten, Conv2D, Normalization, ReLU, Dropout, Average
 from tensorflow.keras import Model, regularizers
 from collections import Counter
 
@@ -174,32 +174,47 @@ def mobilenet_v1(
     classes
 ):
     channel_size = 8
+    # print(inputs.shape)
     ##特征提取层
-    x = conv_block(inputs, channel_size, strides=(2,1))
-#     x = depthwise_conv_block(x, 64)
-#     x = depthwise_conv_block(x, 64, strides=(2,1))
-    # x = depthwise_conv_block(x, channel_size*2, strides=(2,1))
-#     x = depthwise_conv_block(x, 128)
-#     x = depthwise_conv_block(x, 128, strides=(2,1))
-    x = depthwise_conv_block(x, channel_size*4, strides=(2,1))
-#     x = depthwise_conv_block(x, 256)
-#     x = depthwise_conv_block(x, 256, strides=(2,1))
-#     x = depthwise_conv_block(x, 256)
-    # x = depthwise_conv_block(x, channel_size*8, strides=(2,1))
-    x = depthwise_conv_block(x, channel_size*16)
-#     x = depthwise_conv_block(x, 512)
-#     x = depthwise_conv_block(x, 512)
-#     x = depthwise_conv_block(x, 512)
-#     x = depthwise_conv_block(x, 1024)
-    # x = depthwise_conv_block(x, channel_size*32)
-#     x = depthwise_conv_block(x, 1024, strides=(2,1))
-#     x = depthwise_conv_block(x, channel_size)
-    
-    ##全局池化
-    x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x = Dense(64, activation='relu')(x)
+    input_groups = tf.split(inputs, num_or_size_splits=3, axis=-2)
+    outputs = []
+    for i in range(3):
+        # print(input_groups[i].shape)
+        x = conv_block(input_groups[i], channel_size, strides=(2,1))
+    #     x = depthwise_conv_block(x, 64)
+    #     x = depthwise_conv_block(x, 64, strides=(2,1))
+        # x = depthwise_conv_block(x, channel_size*2, strides=(2,1))
+    #     x = depthwise_conv_block(x, 128)
+    #     x = depthwise_conv_block(x, 128, strides=(2,1))
+        x = depthwise_conv_block(x, channel_size*4, strides=(2,1))
+    #     x = depthwise_conv_block(x, 256)
+    #     x = depthwise_conv_block(x, 256, strides=(2,1))
+    #     x = depthwise_conv_block(x, 256)
+        # x = depthwise_conv_block(x, channel_size*8, strides=(2,1))
+        x = depthwise_conv_block(x, channel_size*16)
+    #     x = depthwise_conv_block(x, 512)
+    #     x = depthwise_conv_block(x, 512)
+    #     x = depthwise_conv_block(x, 512)
+    #     x = depthwise_conv_block(x, 1024)
+        # x = depthwise_conv_block(x, channel_size*32)
+    #     x = depthwise_conv_block(x, 1024, strides=(2,1))
+    #     x = depthwise_conv_block(x, channel_size)
+        
+        ##全局池化
+        x = tf.keras.layers.GlobalAveragePooling2D()(x)
+        x = Dense(64, activation='relu')(x)
+        outputs.append(x)
+    # 将三个通道的处理结果连接在一起
+    # concatenated_output = Concatenate()(outputs)
+    weight0 = 0.2
+    weight1 = 0.7
+    weight2 = 0.1
+
+    # 对连接后的结果进行加权平均
+    weighted_average = Average()([outputs[0] * weight0, outputs[1] * weight1, outputs[2] * weight2])
+    print(weighted_average.shape)
     ##全连接层
-    pred = tf.keras.layers.Dense(classes, kernel_regularizer=regularizers.l2(0.01), activation='softmax')(x)
+    pred = tf.keras.layers.Dense(classes, kernel_regularizer=regularizers.l2(0.01), activation='softmax')(weighted_average)
     
     return pred
  
