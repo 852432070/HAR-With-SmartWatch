@@ -10,7 +10,7 @@ from tensorflow.keras import Model, regularizers
 from collections import Counter
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import tensorflow_model_optimization as tfmot
 
 from keras_flops import get_flops
@@ -61,7 +61,7 @@ if not os.path.exists('./light_model'):
 
 # PolynomialDecay = pruning_schedule.PolynomialDecay
 
-data_path = '/data/wang_sc/datasets/PAMAP2_Dataset/Processed1/'
+data_path = '/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made/'
 
 # %%
 train_x = np.load(data_path + 'x_train.npy').astype(np.float32)
@@ -170,20 +170,20 @@ def mobilenet_v1(
     x = conv_block(inputs, channel_size, strides=(2,1))
 #     x = depthwise_conv_block(x, 64)
 #     x = depthwise_conv_block(x, 64, strides=(2,1))
-    x = depthwise_conv_block(x, channel_size*2, strides=(2,1))
+    # x = depthwise_conv_block(x, channel_size*2, strides=(2,1))
 #     x = depthwise_conv_block(x, 128)
 #     x = depthwise_conv_block(x, 128, strides=(2,1))
     x = depthwise_conv_block(x, channel_size*4, strides=(2,1))
 #     x = depthwise_conv_block(x, 256)
 #     x = depthwise_conv_block(x, 256, strides=(2,1))
 #     x = depthwise_conv_block(x, 256)
-    x = depthwise_conv_block(x, channel_size*8, strides=(2,1))
+    # x = depthwise_conv_block(x, channel_size*8, strides=(2,1))
     x = depthwise_conv_block(x, channel_size*16)
 #     x = depthwise_conv_block(x, 512)
 #     x = depthwise_conv_block(x, 512)
 #     x = depthwise_conv_block(x, 512)
 #     x = depthwise_conv_block(x, 1024)
-    x = depthwise_conv_block(x, channel_size*32)
+    # x = depthwise_conv_block(x, channel_size*32)
 #     x = depthwise_conv_block(x, 1024, strides=(2,1))
 #     x = depthwise_conv_block(x, channel_size)
     

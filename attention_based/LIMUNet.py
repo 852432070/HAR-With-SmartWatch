@@ -8,6 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, Normalization, ReLU, Dropout
 from tensorflow.keras import Model, regularizers
 from collections import Counter
+import pickle
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -60,15 +61,17 @@ if not os.path.exists('./light_model'):
 
 
 # PolynomialDecay = pruning_schedule.PolynomialDecay
+datatype = "Processed_self_made"
 
-data_path = '/data/wang_sc/datasets/PAMAP2_Dataset/Processed0/'
+data_path = '/data/wang_sc/datasets/PAMAP2_Dataset/' + datatype + '/'
 
 # %%
+
 train_x = np.load(data_path + 'x_train.npy').astype(np.float32)
 train_y = np.load(data_path + 'y_train.npy').astype(np.int32)
 test_x = np.load(data_path + 'x_test.npy').astype(np.float32)
 test_y = np.load(data_path + 'y_test.npy').astype(np.int32)
-num_classes = len(Counter(train_y.tolist()))
+num_classes = len(Counter(train_y.tolist()))+1
 # train_y = tf.one_hot(
 # 			indices=train_y, 
 # 			depth=train_y.shape[0], 
@@ -90,7 +93,7 @@ train_x.astype(np.float32).reshape(-1,1)).reshape(train_shape[0], train_shape[1]
 test_x = scaler.transform(
 test_x.astype(np.float32).reshape(-1,1)).reshape(test_shape[0], test_shape[1], test_shape[2], 1)
 
-
+pickle.dump(scaler, open('scaler.pkl','wb'))
 # train_x = train_x.reshape(train_shape[0], train_shape[1], train_shape[2], 1)
 
 # test_x = test_x.reshape(test_shape[0], test_shape[1], test_shape[2], 1)
@@ -100,7 +103,7 @@ print(train_x.shape)
 train_dataset = tf.data.Dataset.from_tensor_slices((train_x, train_y))
 test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y))
 
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 SHUFFLE_BUFFER_SIZE = 1024
 EPOCHS = 100
 LEARNING_RATE = 5e-4
@@ -152,14 +155,27 @@ def depthwise_conv_block(
     
     atte = tf.keras.layers.GlobalAveragePooling2D()(x)
     atte = Dense(pointwise_conv_filters, activation='relu')(atte)
+    print("atte shape")
+    print(atte.shape)
 
     x = tf.keras.layers.Multiply()([x, atte])
-    avg_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.mean(x, axis=3, keepdims=True))(x)
-    max_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.max(x, axis=3, keepdims=True))(x)
-    concat = tf.keras.layers.Concatenate(axis=3)([avg_pool, max_pool])
-    atte = tf.keras.layers.Conv2D(filters = 1, kernel_size=(6,1), padding='same', use_bias=False)(concat)
+    # avg_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.mean(x, axis=[1, 3], keepdims=True))(x)
+    # print("avgpool shape")
+    # print(avg_pool.shape)
+    # max_pool = tf.keras.layers.Lambda(lambda x: tf.keras.backend.max(x, axis=[1, 3], keepdims=True))(x)
+    # concat = tf.keras.layers.Concatenate(axis=2)([avg_pool, max_pool])
+    # concat = Flatten()(concat)
+    # print("concat shape")
+    # print(concat.shape)
+    # # atte = tf.keras.layers.Conv2D(filters = 1, kernel_size=(6,1), padding='same', use_bias=False)(concat)
+    atte_c2 = Dense(9, activation='relu')(atte)
+    # atte = Dense(9, activation='relu')(concat)
+    
+    x = tf.keras.layers.Multiply()([x, tf.expand_dims(atte_c2, axis=2)])
 
-    x = tf.keras.layers.Multiply()([x, atte])
+
+    # x = tf.keras.layers.Multiply()([x, tf.expand_dims(atte, axis=2)])
+
 
     identity = tf.keras.layers.Conv2D(pointwise_conv_filters, kernel_size=(1,1), padding='same', strides=strides, use_bias=False, activation='sigmoid')(inputs)
     identity = tf.keras.layers.BatchNormalization()(identity)
@@ -236,6 +252,8 @@ model.fit(train_x, train_y, batch_size=BATCH_SIZE, epochs=EPOCHS,validation_data
           callbacks=[Metrics(valid_data=(test_x, test_y)),
                      ck_callback,
                      tb_callback])
+
+model.save("LIMUNet_trained" + datatype + ".h5")
 # model_for_pruning = prune_low_magnitude(model, **pruning_params)
 # model_for_pruning.compile(
 #     loss='sparse_categorical_crossentropy',
@@ -301,138 +319,138 @@ model.fit(train_x, train_y, batch_size=BATCH_SIZE, epochs=EPOCHS,validation_data
 
 
 
-# %%
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-tflite_model = converter.convert()
-open("./light_model/har_cnn_9axes.tflite", "wb").write(tflite_model)
+# # %%
+# converter = tf.lite.TFLiteConverter.from_keras_model(model)
+# tflite_model = converter.convert()
+# open("./light_model/har_cnn_9axes.tflite", "wb").write(tflite_model)
 
-# %%
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-def representative_dataset():
-    for i in range(100):
-      data = train_x[i].reshape(1,171,9,1)
-      yield [data]
-converter.representative_dataset = representative_dataset
-converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-# converter.inference_input_type = tf.int8  # or tf.uint8
-# converter.inference_output_type = tf.int8  # or tf.uint8
-tflite_model = converter.convert()
-open("./light_model/har_cnn_9axes_q8.tflite", "wb").write(tflite_model)
-
-
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-def representative_dataset():
-    for i in range(100):
-      data = train_x[i].reshape(1,171,9,1)
-      yield [data]
-converter.representative_dataset = representative_dataset
-converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
-# converter.inference_input_type = tf.int8  # or tf.uint8
-# converter.inference_output_type = tf.int8  # or tf.uint8
-tflite_model = converter.convert()
-open("./light_model/har_cnn_9axes_q16x8.tflite", "wb").write(tflite_model)
-# %%
-# model_for_export = tfmot.sparsity.keras.strip_pruning(model_for_pruning)
-# converter = tf.lite.TFLiteConverter.from_keras_model(model_for_export)
+# # %%
+# converter = tf.lite.TFLiteConverter.from_keras_model(model)
 # converter.optimizations = [tf.lite.Optimize.DEFAULT]
 # def representative_dataset():
-#     for i in range(500):
-#       data = test_x[i].reshape(1,171,9,1)
+#     for i in range(100):
+#       data = train_x[i].reshape(1,171,9,1)
 #       yield [data]
 # converter.representative_dataset = representative_dataset
 # converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
 # # converter.inference_input_type = tf.int8  # or tf.uint8
 # # converter.inference_output_type = tf.int8  # or tf.uint8
 # tflite_model = converter.convert()
-# open("/kaggle/working/har_cnn_9axes_pq.tflite", "wb").write(tflite_model)
+# open("./light_model/har_cnn_9axes_q8.tflite", "wb").write(tflite_model)
+
+
+# converter = tf.lite.TFLiteConverter.from_keras_model(model)
+# converter.optimizations = [tf.lite.Optimize.DEFAULT]
+# def representative_dataset():
+#     for i in range(100):
+#       data = train_x[i].reshape(1,171,9,1)
+#       yield [data]
+# converter.representative_dataset = representative_dataset
+# converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
+# # converter.inference_input_type = tf.int8  # or tf.uint8
+# # converter.inference_output_type = tf.int8  # or tf.uint8
+# tflite_model = converter.convert()
+# open("./light_model/har_cnn_9axes_q16x8.tflite", "wb").write(tflite_model)
+# # %%
+# # model_for_export = tfmot.sparsity.keras.strip_pruning(model_for_pruning)
+# # converter = tf.lite.TFLiteConverter.from_keras_model(model_for_export)
+# # converter.optimizations = [tf.lite.Optimize.DEFAULT]
+# # def representative_dataset():
+# #     for i in range(500):
+# #       data = test_x[i].reshape(1,171,9,1)
+# #       yield [data]
+# # converter.representative_dataset = representative_dataset
+# # converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+# # # converter.inference_input_type = tf.int8  # or tf.uint8
+# # # converter.inference_output_type = tf.int8  # or tf.uint8
+# # tflite_model = converter.convert()
+# # open("/kaggle/working/har_cnn_9axes_pq.tflite", "wb").write(tflite_model)
 
 
 
 
-# %%
-import os
-size = os.path.getsize("./light_model/har_cnn_9axes.tflite")
-size_q = os.path.getsize("./light_model/har_cnn_9axes_q.tflite")
+# # %%
+# import os
+# size = os.path.getsize("./light_model/har_cnn_9axes.tflite")
+# size_q = os.path.getsize("./light_model/har_cnn_9axes_q.tflite")
 
-# %%
-import matplotlib.pyplot as plt
+# # %%
+# import matplotlib.pyplot as plt
 
-x=[1,2]  # 确定柱状图数量,可以认为是x方向刻度
-y=[size,size_q]  # y方向刻度
-params = {
-    'figure.figsize': '5, 5'
-}
-plt.rcParams.update(params)
-color=['red','green']
-x_label=['Not quantized','quantized']
-plt.xticks(x, x_label)  # 绘制x刻度标签
-plt.bar(x, y,color=color,width=0.1)  # 绘制y刻度标签
-
-
-plt.show()
-
-# %%
-interpreter = tf.lite.Interpreter(
-  model_path="./light_model/har_cnn_9axes_q8.tflite")
-
-interpreter.allocate_tensors()
-
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# x=[1,2]  # 确定柱状图数量,可以认为是x方向刻度
+# y=[size,size_q]  # y方向刻度
+# params = {
+#     'figure.figsize': '5, 5'
+# }
+# plt.rcParams.update(params)
+# color=['red','green']
+# x_label=['Not quantized','quantized']
+# plt.xticks(x, x_label)  # 绘制x刻度标签
+# plt.bar(x, y,color=color,width=0.1)  # 绘制y刻度标签
 
 
-# %%
-# ind = 18
+# plt.show()
 
-# print(y_test[ind])
+# # %%
+# interpreter = tf.lite.Interpreter(
+#   model_path="./light_model/har_cnn_9axes_q8.tflite")
 
-# %%
-# wave = wave.reshape(171,9,1)
-# import time
+# interpreter.allocate_tensors()
 
-# input_data = np.expand_dims(wave,axis=0)
-num_wave = 500
-predicted = 0
-for i in range(num_wave):
-    wave = test_x[i].reshape(1,171,9,1)
-    interpreter.set_tensor(input_details[0]['index'], wave)
-
-#     start_time = time.time()
-    interpreter.invoke()
-#     stop_time = time.time()
-
-    output_data = interpreter.get_tensor(output_details[0]['index'])
-    if np.argmax(output_data, axis=1) == test_y[i]:
-        predicted+=1
-print('Accuracy:', predicted/num_wave)
+# input_details = interpreter.get_input_details()
+# output_details = interpreter.get_output_details()
 
 
-#test for 16x8 quantization 
-interpreter = tf.lite.Interpreter(
-  model_path="./light_model/har_cnn_9axes_q16x8.tflite")
+# # %%
+# # ind = 18
 
-interpreter.allocate_tensors()
+# # print(y_test[ind])
 
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# # %%
+# # wave = wave.reshape(171,9,1)
+# # import time
+
+# # input_data = np.expand_dims(wave,axis=0)
+# num_wave = 500
+# predicted = 0
+# for i in range(num_wave):
+#     wave = test_x[i].reshape(1,171,9,1)
+#     interpreter.set_tensor(input_details[0]['index'], wave)
+
+# #     start_time = time.time()
+#     interpreter.invoke()
+# #     stop_time = time.time()
+
+#     output_data = interpreter.get_tensor(output_details[0]['index'])
+#     if np.argmax(output_data, axis=1) == test_y[i]:
+#         predicted+=1
+# print('Accuracy:', predicted/num_wave)
 
 
-num_wave = 500
-predicted = 0
-for i in range(num_wave):
-    wave = test_x[i].reshape(1,171,9,1)
-    interpreter.set_tensor(input_details[0]['index'], wave)
+# #test for 16x8 quantization 
+# interpreter = tf.lite.Interpreter(
+#   model_path="./light_model/har_cnn_9axes_q16x8.tflite")
 
-#     start_time = time.time()
-    interpreter.invoke()
-#     stop_time = time.time()
+# interpreter.allocate_tensors()
 
-    output_data = interpreter.get_tensor(output_details[0]['index'])
-    if np.argmax(output_data, axis=1) == test_y[i]:
-        predicted+=1
-print('Accuracy:', predicted/num_wave)
+# input_details = interpreter.get_input_details()
+# output_details = interpreter.get_output_details()
+
+
+# num_wave = 500
+# predicted = 0
+# for i in range(num_wave):
+#     wave = test_x[i].reshape(1,171,9,1)
+#     interpreter.set_tensor(input_details[0]['index'], wave)
+
+# #     start_time = time.time()
+#     interpreter.invoke()
+# #     stop_time = time.time()
+
+#     output_data = interpreter.get_tensor(output_details[0]['index'])
+#     if np.argmax(output_data, axis=1) == test_y[i]:
+#         predicted+=1
+# print('Accuracy:', predicted/num_wave)
 
 # %%
 # model_for_export.summary()

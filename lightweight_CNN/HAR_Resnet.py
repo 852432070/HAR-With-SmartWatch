@@ -8,7 +8,7 @@ import numpy as np
 from collections import Counter
 import os
 from keras_flops import get_flops
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from sklearn.metrics import f1_score, recall_score, precision_score
 
@@ -46,10 +46,10 @@ if not os.path.exists('./checkpoints'):
 
 
 # %%
-train_x = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed0/x_train.npy').astype(np.float32)
-train_y = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed0/y_train.npy').astype(np.int32)
-test_x = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed0/x_test.npy').astype(np.float32)
-test_y = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed0/y_test.npy').astype(np.int32)
+train_x = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made/x_train.npy').astype(np.float32)
+train_y = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made/y_train.npy').astype(np.int32)
+test_x = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made/x_test.npy').astype(np.float32)
+test_y = np.load('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made/y_test.npy').astype(np.int32)
 
 train_shape = train_x.shape
 train_x = train_x.reshape(train_shape[0], train_shape[1], train_shape[2], 1)
